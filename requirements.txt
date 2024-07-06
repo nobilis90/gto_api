@@ -1,0 +1,13 @@
+python-dotenv
+requests
+fastapi
+uvicorn
+langchain
+langchain-community
+langchain-openai
+python-dotenv
+sentence_transformers
+unstructured
+pandas
+elasticsearch
+cryptography
