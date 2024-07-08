@@ -45,7 +45,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 def setup_logger():
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.INFO)
-    file_handler = logging.FileHandler('api.log')
+    file_handler = logging.FileHandler('log/api.log')
     console_handler = logging.StreamHandler()
     log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     file_formatter = logging.Formatter(log_format)
