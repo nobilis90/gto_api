@@ -1,27 +1,38 @@
 import os
 import json
 import secrets
+from dotenv import load_dotenv
 from cryptography.fernet import Fernet, InvalidToken
 
+load_dotenv()
+
+
+
 # Define the path for the key and tokens file
-key_path = "auth/secret.key"
+#key_path = "auth/secret.key"
 file_path = "auth/tokens.json"
 
 # Generate and save the key (do this once and store it securely)
-def generate_and_save_key(key_path):
-    key = Fernet.generate_key()
-    with open(key_path, 'wb') as key_file:
-        key_file.write(key)
+# def generate_and_save_key(key_path):
+#     key = Fernet.generate_key()
+#     with open(key_path, 'wb') as key_file:
+#         key_file.write(key)
 
 # Load the key from the file
-def load_key(key_path):
-    if not os.path.exists(key_path):
-        generate_and_save_key(key_path)
-    with open(key_path, 'rb') as key_file:
-        return key_file.read()
+# def load_key(key_path):
+#     if not os.path.exists(key_path):
+#         generate_and_save_key(key_path)
+#     with open(key_path, 'rb') as key_file:
+#         return key_file.read()
 
 # Initialize Fernet with the loaded key
-key = load_key(key_path)
+try:
+    key = os.getenv("SECRET_KEY")
+except Exception as err:
+    logging.error("Environment variables is missing SECRET_KEY")
+    raise SystemExit()
+
+#key = load_key(key_path)
 cipher_suite = Fernet(key)
 
 def generate_token(length: int = 16) -> str:

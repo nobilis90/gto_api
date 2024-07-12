@@ -26,9 +26,11 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
 from elasticsearch import Elasticsearch
+#from transformers import GPT2TokenizerFast
 import pandas as pd
+#import tiktoken
 from typing import List
-import requests
+#import requests
 import urllib3 
 
 ### Chat LLM
@@ -184,23 +186,25 @@ async def get_genai_model(
 
 ########### ADMIN ###################
 
-@app.post("/admin/add_user_token", tags=["Admin"], description="Add a new token for a user.")
-def add_user_token( user_email: str, user_type: str, api_key: str = Depends(verify_api_key)):
+# @app.post("/admin/add_user_token", tags=["Admin"], description="Add a new token for a user.")
+# def add_user_token( user_email: str, user_type: str, api_key: str = Depends(verify_api_key)):
 
-    decrypted_token = decrypt_token(api_key["token"])
+#     decrypted_token = decrypt_token(api_key["token"])
 
-    if decrypted_token["role"] == "admin":
-        logging.info(f"Admin token ({api_key['mail']}) used to add a new token for {user_email} ({user_type})")
+#     if decrypted_token["role"] == "admin":
+#         logging.info(f"Admin token ({api_key['mail']}) used to add a new token for {user_email} ({user_type})")
     
-        try:
-            new_token = add_user( user_email, user_type)
-            logging.info(f"Successfull new token for {user_email} ({user_type})")
-            return JSONResponse(content={"message": f"New token for {user_email} ({user_type}) successfully created" , "new_token" : new_token })
-        except ValueError as e:
-            raise HTTPException(status_code=500, detail=str(e))
-    else:
-        logging.error(f"Unauthorized access by {api_key['mail']}")
-        raise HTTPException(status_code=401, detail="Unauthorized access")
+#         try:
+#             new_token = add_user( user_email, user_type)
+#             logging.info(f"Successfull new token for {user_email} ({user_type})")
+#             return JSONResponse(content={"message": f"New token for {user_email} ({user_type}) successfully created" , "new_token" : new_token })
+#         except ValueError as e:
+#             raise HTTPException(status_code=500, detail=str(e))
+#     else:
+#         logging.error(f"Unauthorized access by {api_key['mail']}")
+#         raise HTTPException(status_code=401, detail="Unauthorized access")
+
+
 
 ########### QUERY LLM ###################
 
@@ -208,12 +212,16 @@ def add_user_token( user_email: str, user_type: str, api_key: str = Depends(veri
 async def get_simple_answer(model_id:str, user_query:str, api_key: str = Depends(verify_api_key), api_endpoint= os.getenv("BR_URL") , model_kwargs:Dict = {"temperature": 0}):
     try:
         
+        logging.info(f"{api_key['mail']} - Processing a simple query with model {model_id} and user query: {user_query}")
+
         llm = await get_genai_model(model_id, api_key["llm_token"], api_endpoint, model_kwargs)
 
         prompt = PromptTemplate.from_template("{question}")
 
         chain = prompt | llm
         answer = chain.invoke(user_query)
+
+        logging.info(f"Answer generated successfully")
 
         return JSONResponse(content={"answer": answer})
     except Exception as e:
@@ -224,14 +232,16 @@ async def get_simple_answer(model_id:str, user_query:str, api_key: str = Depends
 @app.post("/query/prompt_template" , tags=["Query"], description="This endpoint processes a user query using a specified prompt template and returns the generated answer.")
 async def get_answer_with_prompt(model_id:str, user_query:dict = {"adjective": "italien", "content":"france"}, prompt_template:str = query_prompt ,  api_key: str = Depends(verify_api_key), api_endpoint= os.getenv("BR_URL") , model_kwargs:Dict = {"temperature": 0}):
     try:
+        logging.info(f"{api_key['mail']} - Processing prompt template query with model {model_id} ")
 
-        llm = await get_genai_model(model_id, api_key, api_endpoint, model_kwargs)
+        llm = await get_genai_model(model_id, api_key["llm_token"], api_endpoint, model_kwargs)
 
         prompt = ChatPromptTemplate.from_template(prompt_template)
 
         chain = prompt | llm
         answer = chain.invoke(user_query)
 
+        logging.info(f"Answer generated successfully")
         return JSONResponse(content={"answer": answer})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -243,12 +253,15 @@ async def get_answer_with_prompt(model_id:str, user_query:dict = {"adjective": "
 @app.post("/summarization/map_reduce" ,  tags=["Summarization"], description="Summarize a given text using the map-reduce method with the specified model and prompts.")
 async def summarization_map_reduce(model_id:str, text:str, api_key: str = Depends(verify_api_key), api_endpoint= os.getenv("BR_URL") , model_kwargs:Dict = {"temperature": 0}, map_prompt:str = map_prompt, combine_prompt:str = combine_prompt, ) -> JSONResponse:
     try:
+
+        logging.info(f"{api_key['mail']} - Processing a map-reduce summarization with model {model_id} ")
+
         docs =  split_text(text)
 
         map_prompt_template = PromptTemplate(template=map_prompt, input_variables=["text"])        
         combine_prompt_template = PromptTemplate(template=combine_prompt, input_variables=["text"])
 
-        llm = await get_genai_model(model_id, api_key, api_endpoint, model_kwargs)
+        llm = await get_genai_model(model_id, api_key["llm_token"], api_endpoint, model_kwargs)
 
         summary_chain = load_summarize_chain(
             llm=llm,
@@ -259,7 +272,11 @@ async def summarization_map_reduce(model_id:str, text:str, api_key: str = Depend
         )
 
         answer = summary_chain.invoke(docs)
-        return JSONResponse(content={"answer": answer})
+
+        logging.info(answer)
+        logging.info(f"Answer generated successfully")
+        # JSONResponse(content={"answer": answer})
+        return answer
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -270,21 +287,21 @@ async def summarization_map_reduce(model_id:str, text:str, api_key: str = Depend
 @app.post("/summarization/stuff",  tags=["Summarization"], description="Summarize a given text using the 'stuff' method with the specified model and prompt.")
 async def summarization_stuff(model_id:str, text:str, api_key: str = Depends(verify_api_key), api_endpoint= os.getenv("BR_URL") , model_kwargs:Dict = {"temperature": 0}, prompt:str = prompt) -> JSONResponse:
     try:
-        
+        logging.info(f"{api_key['mail']} - Processing a 'stuff' summarization with model {model_id} ")
         docs =  split_text(text)
-
+        logging.info(text)
         prompt_stuff = PromptTemplate.from_template(prompt)   
 
-        llm = await get_genai_model(model_id, api_key, api_endpoint, model_kwargs)
+        llm = await get_genai_model(model_id, api_key["llm_token"], api_endpoint, model_kwargs)
 
         summary_chain = load_summarize_chain(llm=llm,
                                             chain_type="stuff",
                                             prompt=prompt_stuff,
                                             verbose=False
                                             )
-        answer = summary_chain.invoke(docs)
+        answer = summary_chain.invoke({"input_documents" : docs})
 
-        return JSONResponse(content={"answer": answer})
+        return answer
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -308,7 +325,7 @@ async def simple_conversation(model_id:str, user_query:str , api_key: str = Depe
     try:
         global conversation_memories
 
-        llm = await get_genai_model(model_id, api_key, api_endpoint, model_kwargs)
+        llm = await get_genai_model(model_id, api_key["llm_token"], api_endpoint, model_kwargs)
 
         memory , session_id = get_memory(session_id)
 
@@ -343,7 +360,7 @@ async def conversation_with_context(model_id:str,
 
     
         global conversation_memories
-        llm = await get_genai_model(model_id, api_key, api_endpoint, model_kwargs)
+        llm = await get_genai_model(model_id, api_key["llm_token"], api_endpoint, model_kwargs)
 
         memory , session_id = get_memory(session_id)
 
@@ -486,6 +503,18 @@ async def elk_answer_to_dataframe(query_result:List[Dict]) :
     return JSONResponse(content={"dataframe": df.to_dict()})
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="10.199.154.4", port=8002)
+
+
+@app.post("/text/token_count", tags=["text"], description="Count the number of tokens in a given text.")
+def count_tokens_gpt(text:str, encoding_name:str = "cl100k_base") :
+
+    encoding = tiktoken.get_encoding(encoding_name)
+    num_tokens = len(encoding.encode(text))
+
+    return JSONResponse(content={"token_count": num_tokens})
+
+
+
+#if __name__ == "__main__":
+#    import uvicorn
+#    uvicorn.run(app, host="10.199.154.4", port=8002)
